@@ -1,4 +1,4 @@
-#include "BMI055LITE.h"
+#include "BMI055.h"
 #include "Arduino.h"
 #include "Wire.h"
 
@@ -28,6 +28,7 @@
 #define GYRO_INT_EN0      0x15
 #define GYRO_SOC          0x31
 #define GYRO_FOC          0x32
+#define GYRO_INTMAP_1     0x1b
 
 #define BMI055_ACC_ADDR  0x30
 #define BMI055_GYRO_ADDR 0xd0
@@ -43,13 +44,10 @@
 #define ACC_MINUS1G_Z (2048-1024)
 /****************************************/
 
-BMI055::BMI055()
-{
-    Wire.begin();
-};
+BMI055::BMI055(){};
 
 void BMI055::write(int addr, int reg, int data) {
-    Wire.beginTransmission(addr);
+    Wire.beginTransmission(addr>>1);
     Wire.write(reg);
     Wire.write(data);
     Wire.endTransmission(true);
@@ -59,48 +57,52 @@ bool BMI055::initialize() {
     
     write(BMI055_ACC_ADDR, ACC_SFRSET, 0xb6);
     delay(100);
-    write(BMI055_ACC_ADDR, ACC_RANGE, 0x08); // 8g
+    write(BMI055_ACC_ADDR, ACC_RANGE, 0b00001000); // 8g
     delay(10);
     write(BMI055_ACC_ADDR, ACC_BW, 0x0d); // 500hz
     delay(10);
 
-    write(BMI055_GYRO_ADDR, GYRO_RANGE, 0x00);
+    write(BMI055_GYRO_ADDR, GYRO_RANGE, 0x01);
     delay(10);
-    write(BMI055_GYRO_ADDR, GYRO_BW, 0x02); // 1Khz, 0x03 is 400hz
+    write(BMI055_GYRO_ADDR, GYRO_BW, 0b00000011);
     delay(10);
     write(BMI055_GYRO_ADDR, GYRO_INT_EN0, 0xa0); //new data int enable and auto-offset compensation
     delay(10);
-
+    write(BMI055_GYRO_ADDR, GYRO_INTMAP_1, 0b00000001);
+    delay(10);
+    
     return true;
 };
 
 void BMI055::read_gyro() {
-    Wire.beginTransmission(BMI055_GYRO_ADDR);
-    Wire.write(GYRO_X_LSB);
-    Wire.endTransmission(false);
-    Wire.requestFrom(GYRO_X_LSB, 6, true);
-    
-    // if (rad == true) {
-    gyro.x = (int16_t)(Wire.read()|Wire.read()<<8) / 900.0;
-    gyro.y = (int16_t)(Wire.read()|Wire.read()<<8) / 900.0;
-    gyro.z = (int16_t)(Wire.read()|Wire.read()<<8) / 900.0; 
-    // }
 
-    // if (rad == false) {
-    //     gyro.x = (int16_t)(Wire.read()|Wire.read()<<8) / 16.0;
-    //     gyro.y = (int16_t)(Wire.read()|Wire.read()<<8) / 16.0;
-    //     gyro.z = (int16_t)(Wire.read()|Wire.read()<<8) / 16.0; 
-    // }
+    last_gyros = gyro;
+
+    Wire.beginTransmission(BMI055_GYRO_ADDR>>1);
+    Wire.write(GYRO_X_LSB);
+    Wire.requestFrom(BMI055_GYRO_ADDR>>1, 6, true);
+
+    gyro.x = (int16_t)(Wire.read()|Wire.read()<<8) * 0.03051757812; // same as x / 32768.0 * 1000.0
+    gyro.y = (int16_t)(Wire.read()|Wire.read()<<8) * 0.03051757812; 
+    gyro.z = (int16_t)(Wire.read()|Wire.read()<<8) * 0.03051757812; 
+
+    gyro.x *= DEG_TO_RAD;
+    gyro.y *= DEG_TO_RAD;
+    gyro.z *= DEG_TO_RAD;
+
+    Wire.endTransmission(true);
     
 };
 
 void BMI055::read_accel() {
-    Wire.beginTransmission(BMI055_ACC_ADDR);
+
+    Wire.beginTransmission(BMI055_ACC_ADDR>>1);
     Wire.write(ACC_X_LSB);
-    Wire.endTransmission(false);
-    Wire.requestFrom(ACC_X_LSB, 6, true);
+    Wire.requestFrom(BMI055_ACC_ADDR>>1, 6, true);
     
-    accel.y = (int16_t)(Wire.read()|Wire.read()<<8) / 100.0;
-    accel.x = (int16_t)(Wire.read()|Wire.read()<<8) / 100.0;
-    accel.z = (int16_t)(Wire.read()|Wire.read()<<8) / 100.0;
+    accel.y = (int16_t)(Wire.read()|Wire.read()<<8) * 0.00239501953;
+    accel.x = (int16_t)(Wire.read()|Wire.read()<<8) * 0.00239501953;
+    accel.z = (int16_t)(Wire.read()|Wire.read()<<8) * 0.00239501953;
+
+    Wire.endTransmission(true);
 };
