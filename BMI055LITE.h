@@ -17,15 +17,10 @@ class BMI055
 
     typedef struct {
       float x, y, z;
-    } Gyro;
+    } v3;
 
-    Gyro gyro;
-
-    typedef struct {
-      float x, y, z;
-    } Accel;
-
-    Accel accel;
+    v3 gyro;
+    v3 accel;
 
   private:
     void write(int addr, int reg, int data);
